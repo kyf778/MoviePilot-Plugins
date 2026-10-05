@@ -1,0 +1,24 @@
+{
+  "MyLibrary": {
+    "id": "MyLibrary",
+    "name": "我的媒体库",
+    "description": "在 MoviePilot 左侧导航栏浏览本地媒体库。读取 NFO 元数据与本地图片，展示海报墙；悬停卡片查看简介，点开查看导演、演职员、清晰度、体积、文件清单，并可直达 TheMovieDb / IMDb / 豆瓣。",
+    "author": "kyf778",
+    "version": "3.3.0",
+    "labels": "媒体整理,媒体库",
+    "category": "媒体库",
+    "level": 2,
+    "release": true,
+    "icon": "https://raw.githubusercontent.com/kyf778/MoviePilot-Plugins/main/icons/mylibrary.png",
+    "system_version": ">=3.0.0",
+    "history": {
+      "v3.3.0": "详情页新增豆瓣链接：预抓豆瓣 id 落盘缓存（tools/fetch_douban_ids.py），后端读缓存随条目返回",
+      "v3.2.1": "关闭按钮改为弹窗右上角绝对定位",
+      "v3.2.0": "横版背景改用 landscape.jpg（正常横构图，避免 fanart 常见的主观视角构图），详情页改为单列",
+      "v3.1.0": "详情弹窗对齐官方 MediaDetailView：横版背景+四边渐隐、左下竖版海报、官方主创名单",
+      "v3.0.0": "海报墙对齐官方 MediaCard：纯海报卡+悬停渐变详情层、类型与评分角标",
+      "v2.0.0": "Vue 联邦重构：左侧导航栏入口 + 海报墙网格",
+      "v1.0.0": "初始版本：插件详情页 JSON 渲染片库列表"
+    }
+  }
+}
