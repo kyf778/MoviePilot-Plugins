@@ -1,0 +1,20 @@
+# 依赖与构建缓存
+node_modules/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# 本地运行时缓存（绝不入库）
+.douban_ids.json
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
