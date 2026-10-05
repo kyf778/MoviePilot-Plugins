@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        提交前请确认已阅读 [贡献指南](../blob/main/CONTRIBUTING.md)。
+        提交前请确认已阅读 [贡献指南](https://github.com/kyf778/MoviePilot-Plugins/blob/main/CONTRIBUTING.md)。
 
   - type: input
     id: plugin

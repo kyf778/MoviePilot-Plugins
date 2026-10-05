@@ -15,7 +15,7 @@
 | 字段 | 说明 |
 | --- | --- |
 | `enabled` | 是否启用插件 |
-| `library_path` | 媒体库根目录，例如 `/vol1/1000/Videos` |
+| `library_path` | 媒体库根目录，例如 `/media/Videos/电影` |
 | `poster_size` | 海报尺寸 `small` / `medium` / `large` |
 
 ## 依赖的数据

@@ -30,7 +30,7 @@ https://raw.githubusercontent.com/kyf778/MoviePilot-Plugins/main
 安装后在插件设置中填写：
 
 - **启用**：开启插件
-- **媒体库目录**：例如 `/vol1/1000/Videos`（每个影片一个子目录，目录内含 NFO 与图片）
+- **媒体库目录**：例如 `/media/Videos/电影`（每个影片一个子目录，目录内含 NFO 与图片）
 - **海报尺寸**：`medium` / `small` / `large`
 
 插件会在左侧「媒体整理」分组下出现「我的媒体库」入口。
@@ -62,7 +62,7 @@ Videos/
 NFO 中通常没有 `<doubanid>`，豆瓣又有反爬限制，因此仓库提供一次性抓取脚本：
 
 ```bash
-python3 tools/fetch_douban_ids.py /vol1/1000/Videos
+python3 tools/fetch_douban_ids.py /media/Videos/电影
 ```
 
 脚本会生成 `<媒体库目录>/.douban_ids.json`，插件读取该缓存并在详情页生成豆瓣条目直链。
@@ -82,24 +82,31 @@ MoviePilot-Plugins/
 │       └── dist/            # Vue 联邦构建产物
 ├── icons/                   # 插件图标
 ├── tools/                   # 辅助脚本
-├── tests/v3/mylibrary/      # V3 插件测试
-├── .github/scripts/         # 发布前检查脚本
+├── docs/                    # 插件文档
+├── tests/
+│   ├── run.py               # 回归入口（按代际分组运行）
+│   └── v3/mylibrary/        # V3 插件测试
+├── .github/
+│   ├── scripts/             # 门禁与检查脚本（含从官方 vendor 的原件）
+│   └── workflows/           # CI 与 Release
 ├── package.v3.json          # V3 插件市场索引（本插件实际生效的索引）
-└── package.json             # 旧代索引占位，见下方说明
+├── package.json             # 旧代索引占位，见下方说明
+└── package.v2.json          # V2 代索引占位
 ```
 
-### 关于两个索引文件的版本号
+### 关于三个索引文件的版本号
 
 官方版本门禁要求 **V3 版本 = 旧代版本主号 + 1**（大版本跃迁）。本插件是 V3 专用实现，
-因此：
+因此旧代索引统一标 `"v3": false` 排除：
 
 | 文件 | 版本 | 作用 |
 |---|---|---|
 | `package.v3.json` | `3.3.0` | V3 宿主实际读取的索引 |
-| `package.json` | `2.0.0` + `"v3": false` | 旧代占位，让旧代宿主识别后跳过 |
+| `package.v2.json` | `2.0.0` + `"v3": false` | V2 代占位，让 V2 宿主识别后跳过 |
+| `package.json` | `2.0.0` + `"v3": false` | 旧代占位 |
 
-⚠️ **不要把 `package.json` 的版本改成 `3.3.0`**，那会触发官方门禁失败
-（V3 版本必须比旧代大一号）。改动版本时两个文件要一起考虑。
+⚠️ **不要把 `package.json` / `package.v2.json` 的版本改成 `3.3.0`**，那会触发官方门禁失败
+（V3 版本必须比旧代大一号）。改动版本时三个文件要一起考虑。
 
 ## 开发
 
@@ -109,18 +116,25 @@ pnpm install
 pnpm build          # 产物输出到 dist/assets
 ```
 
-提交前跑一次统一检查（Python 编译 + 版本一致性 + 联邦 CSS 隔离 + 隐私扫描 + 单元测试）：
+提交前跑一次统一检查（Python 编译 + 版本门禁 + CSS 门禁 + 隐私扫描 + 单元测试）：
 
 ```bash
 python .github/scripts/preflight.py
 ```
 
-> 该脚本等价于官方门禁的本地版本。官方 CI 还会额外运行
-> `check_federation_css.py` 与 `check_plugin_versions.py` 两个脚本，
-> 判定逻辑以官方为准。
+也可以只跑测试：
 
-本仓库自己的 CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上运行
-preflight 与联邦产物检查，测试全用本地临时目录，不访问公网。
+```bash
+python tests/run.py
+```
+
+> `preflight.py` 里的版本与 CSS 检查是**直接调用从官方仓库 vendor 过来的原件**
+> （`.github/scripts/check_plugin_versions.py`、`check_federation_css.py`），
+> 判定逻辑与官方 CI 一致，不做二次实现。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+本仓库的 CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上运行门禁与测试，
+Release 工作流（`release.yml`）在 `package.v3.json` 变更时把插件目录打包成
+`MyLibrary_v<版本>.zip` 发布到 Releases。测试全用本地临时目录，不访问公网。
 
 提交前请确保：
 

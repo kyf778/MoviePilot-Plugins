@@ -11,8 +11,8 @@
     python3 fetch_douban_ids.py <媒体库目录> [输出文件]
 
 示例：
-    python3 fetch_douban_ids.py /vol1/1000/Videos
-    python3 fetch_douban_ids.py /vol1/1000/Videos /vol1/1000/Videos/.douban_ids.json
+    python3 fetch_douban_ids.py /media/Videos/电影
+    python3 fetch_douban_ids.py /media/Videos/电影 /media/Videos/电影/.douban_ids.json
 
 输出（默认写入 <媒体库目录>/.douban_ids.json）：
     {
@@ -145,7 +145,7 @@ def main():
     ap = argparse.ArgumentParser(
         description="抓取豆瓣 subject id 并缓存，供「我的媒体库」插件生成豆瓣链接",
     )
-    ap.add_argument("library", help="媒体库目录，例如 /vol1/1000/Videos")
+    ap.add_argument("library", help="媒体库目录，例如 /media/Videos/电影")
     ap.add_argument(
         "-o", "--output",
         help="输出 JSON 路径（默认 <媒体库目录>/.douban_ids.json）",

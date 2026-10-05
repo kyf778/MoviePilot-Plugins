@@ -92,25 +92,34 @@ def check_no_leaks() -> None:
     print("\n=== 隐私扫描 ===")
     patterns = [
         (r"192\.168\.\d+\.\d+", "内网 IP"),
-        (r"/vol2/1000/", "个人 NAS 路径"),
+        (r"10\.\d+\.\d+\.\d+", "内网 IP"),
+        # fnOS / 群晖的卷挂载点，匹配所有卷号而不只是某一个
+        (r"/vol\d+/\d+/", "个人 NAS 卷路径"),
+        (r"/mnt/[a-z]+/", "本地挂载路径"),
         (r"sk-[A-Za-z0-9]{16,}", "疑似密钥"),
         (r"gh[pousr]_[A-Za-z0-9]{30,}", "GitHub token"),
+        (r"[\w.+-]+@[\w-]+\.[\w.]{2,}", "邮箱地址"),
     ]
     leaks = []
     skip_dirs = {"node_modules", ".git", "__pycache__"}
+    scanned_suffixes = {".py", ".md", ".json", ".vue", ".js", ".css",
+                        ".yml", ".yaml", ".sh", ".txt"}
     for path in ROOT.rglob("*"):
         if not path.is_file():
             continue
         if any(part in skip_dirs for part in path.parts):
             continue
-        if path.suffix not in {".py", ".md", ".json", ".vue", ".js", ".css"}:
+        if path.suffix not in scanned_suffixes:
             continue
         if path.name == Path(__file__).name:
             continue  # 本脚本含检测模式串
         text = path.read_text(encoding="utf-8", errors="ignore")
         for pattern, label in patterns:
-            if re.search(pattern, text):
-                leaks.append("%s -> %s" % (path.relative_to(ROOT), label))
+            for match in re.finditer(pattern, text):
+                line = text.count("\n", 0, match.start()) + 1
+                snippet = match.group(0)[:60]
+                leaks.append("%s:%d -> %s（%s）"
+                             % (path.relative_to(ROOT).as_posix(), line, label, snippet))
     for leak in leaks:
         fail("泄漏：%s" % leak)
     if not leaks:
@@ -178,12 +187,36 @@ def check_compile() -> None:
             fail("编译失败 %s: %s" % (path.relative_to(ROOT), r.stderr.strip()[:200]))
 
 
+def check_docs() -> None:
+    """Markdown 内部链接必须指向真实存在的文件。"""
+    print("\n=== 文档链接 ===")
+    pattern = re.compile(r"\[([^\]]+)\]\(([^)#][^)]*)\)")
+    broken = []
+    scanned = 0
+    for md in sorted(ROOT.rglob("*.md")):
+        if any(part in {".git", "node_modules"} for part in md.parts):
+            continue
+        text = md.read_text(encoding="utf-8", errors="ignore")
+        for _, target in pattern.findall(text):
+            if target.startswith(("http", "mailto:")):
+                continue
+            resolved = (md.parent / target.split("#")[0]).resolve()
+            scanned += 1
+            if not resolved.exists():
+                broken.append("%s -> %s" % (md.relative_to(ROOT).as_posix(), target))
+    for item in broken:
+        fail("坏链：%s" % item)
+    if not broken:
+        ok("%d 条内部链接均有效" % scanned)
+
+
 def main() -> int:
     print("MoviePilot 插件发布前检查：%s" % ROOT)
     check_compile()
     check_versions()
     check_federation_css()
     check_no_leaks()
+    check_docs()
     check_tests()
 
     print("\n" + "=" * 50)
