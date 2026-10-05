@@ -149,8 +149,28 @@ def check_tests() -> None:
         fail("测试失败：\n%s" % "\n".join(tail[-15:]))
 
 
+def check_compile() -> None:
+    """Python 编译检查（官方清单第一项）。"""
+    print("\n=== Python 编译 ===")
+    targets = [INIT, ROOT / "tools" / "fetch_douban_ids.py"]
+    targets += sorted((ROOT / "tests").rglob("*.py"))
+    targets += sorted((ROOT / ".github").rglob("*.py"))
+    for path in targets:
+        if not path.is_file():
+            continue
+        r = subprocess.run(
+            [sys.executable, "-m", "py_compile", str(path)],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            ok(path.relative_to(ROOT).as_posix())
+        else:
+            fail("编译失败 %s: %s" % (path.relative_to(ROOT), r.stderr.strip()[:200]))
+
+
 def main() -> int:
     print("MoviePilot 插件发布前检查：%s" % ROOT)
+    check_compile()
     check_versions()
     check_federation_css()
     check_no_leaks()

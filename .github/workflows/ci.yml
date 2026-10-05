@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  preflight:
+    name: 发布前检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 版本一致性 / 联邦 CSS 隔离 / 隐私扫描 / 单元测试
+        run: python .github/scripts/preflight.py
+
+      - name: 提交无空白错误
+        run: git diff --check
+
+  plugin-artifacts:
+    name: 联邦产物检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: remoteEntry 与引用的 CSS 必须存在
+        run: |
+          python - <<'PY'
+          import re, sys
+          from pathlib import Path
+
+          errors = []
+          for entry in Path("plugins.v3").glob("*/dist/assets/remoteEntry.js"):
+              text = entry.read_text(encoding="utf-8")
+              for chunk in re.findall(r"dynamicLoadingCss\s*\(\s*\[([^]]*)]", text, re.S):
+                  for css in re.findall(r"['\"]([^'\"]+\.css)['\"]", chunk):
+                      target = entry.parent / css
+                      if not target.is_file():
+                          errors.append(f"{entry}: 引用了不存在的 {css}")
+          shared = list(Path("plugins.v3").glob("*/dist/**/__federation_shared_vuetify/styles-*.css"))
+          for css in shared:
+              errors.append(f"{css}: 不得发布 Vuetify 共享基础样式")
+          if errors:
+              print("\n".join(errors))
+              sys.exit(1)
+          print("联邦产物检查通过")
+          PY
