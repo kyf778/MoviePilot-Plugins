@@ -118,23 +118,45 @@ def check_no_leaks() -> None:
 
 
 def check_tests() -> None:
-    """运行单元测试。"""
+    """运行单元测试。
+
+    走 tests/run.py（与官方仓库同一个回归入口），优先 pytest；
+    环境未安装 pytest 时回退 unittest discover，让不装依赖的贡献者
+    也能跑。两条路径都失败才算不通过。
+    """
     print("\n=== 单元测试 ===")
-    tests = ROOT / "tests" / "v3" / PLUGIN_ID
-    if not tests.is_dir():
-        fail("缺少 tests/v3/%s/" % PLUGIN_ID)
+    runner = ROOT / "tests" / "run.py"
+    if not runner.is_file():
+        fail("缺少 tests/run.py 回归入口")
         return
-    r = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover",
-         "-s", str(tests), "-p", "test_*.py"],
-        capture_output=True, text=True,
+
+    attempts = (
+        ("pytest", [sys.executable, str(runner), "-q"]),
+        ("unittest", [
+            sys.executable, "-m", "unittest", "discover",
+            "-s", str(ROOT / "tests" / "v3" / PLUGIN_ID), "-p", "test_*.py",
+        ]),
     )
-    tail = (r.stderr or r.stdout).strip().splitlines()
-    if r.returncode == 0:
-        summary = [x for x in tail if x.startswith("Ran ") or x.startswith("OK")]
-        ok(" ".join(summary) or "全部通过")
-    else:
-        fail("测试失败：\n%s" % "\n".join(tail[-15:]))
+    last_error = ""
+    for name, cmd in attempts:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", cwd=str(ROOT))
+        if r.returncode == 0:
+            tail = (r.stdout or r.stderr or "").strip().splitlines()
+            summary = next(
+                (x for x in reversed(tail)
+                 if "passed" in x or x.startswith("OK") or x.startswith("Ran ")),
+                "全部通过",
+            )
+            ok("%s：%s" % (name, summary.strip()))
+            return
+        combined = (r.stdout or "") + (r.stderr or "")
+        # 缺 pytest 时 Python 的报错文本在 3.10+ 带引号：No module named 'pytest'
+        if "No module named" in combined and "pytest" in combined:
+            continue  # 没装 pytest，换下一种方式
+        last_error = combined.strip().splitlines()[-15:]
+        break
+    fail("测试失败：\n%s" % "\n".join(last_error or ["无法运行测试"]))
 
 
 def check_compile() -> None:

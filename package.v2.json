@@ -1,0 +1,19 @@
+{
+  "MyLibrary": {
+    "id": "MyLibrary",
+    "name": "我的媒体库",
+    "description": "在 MoviePilot 左侧导航栏浏览本地媒体库。读取 NFO 元数据与本地图片，展示海报墙；悬停卡片查看简介，点开查看导演、演职员、清晰度、体积、文件清单，并可直达 TheMovieDb / IMDb / 豆瓣。",
+    "author": "kyf778",
+    "version": "2.0.0",
+    "v3": false,
+    "labels": "媒体整理,媒体库",
+    "category": "媒体库",
+    "level": 2,
+    "release": false,
+    "icon": "https://raw.githubusercontent.com/kyf778/MoviePilot-Plugins/main/icons/mylibrary.png",
+    "system_version": ">=3.0.0",
+    "history": {
+      "v2.0.0": "V2 代索引占位：本插件为 V3 专用实现，用 v3=false 排除，仅供旧代宿主识别后跳过"
+    }
+  }
+}

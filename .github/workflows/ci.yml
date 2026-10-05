@@ -19,7 +19,7 @@ jobs:
       # 这两个脚本是从 jxxghp/MoviePilot-Plugins 原样 vendor 进来的，
       # 判定逻辑与官方 CI 完全一致，避免本地重写版与官方规则漂移。
       - name: 插件版本门禁（官方 check_plugin_versions.py）
-        run: python .github/scripts/check_plugin_versions.py package.v3.json
+        run: python .github/scripts/check_plugin_versions.py package.json package.v2.json package.v3.json
 
       - name: 联邦 CSS 隔离门禁（官方 check_federation_css.py）
         run: python .github/scripts/check_federation_css.py --root .
