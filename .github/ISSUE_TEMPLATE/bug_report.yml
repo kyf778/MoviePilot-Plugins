@@ -1,0 +1,59 @@
+name: 问题反馈
+description: 报告 MyLibrary 插件的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        反馈前请先看 [插件文档](../blob/main/plugins.v3/mylibrary/README.md)。
+        请勿在 issue 中粘贴 Cookie、API Token 等凭据。
+
+  - type: input
+    id: mp-version
+    attributes:
+      label: MoviePilot 版本
+      placeholder: "例如 v3.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: 插件版本
+      placeholder: "例如 3.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 部署环境
+      placeholder: "例如 fnOS 1.1.5 / Docker"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 描述你期望的结果与实际结果的差异
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 如何复现
+      description: 在 MoviePilot 中需要做哪些操作才能触发
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: |
+        MoviePilot → 日志，筛选 MyLibrary 相关行。
+        请用代码块包裹，并删除其中的凭据。
+      render: text

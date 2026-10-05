@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: MoviePilot 官方讨论区
+    url: https://github.com/jxxghp/MoviePilot/discussions/new/choose
+    about: 插件使用方法与通用问题
+  - name: MoviePilot 官方 Telegram 群
+    url: https://t.me/moviepilot_official
+    about: 使用交流与互助
