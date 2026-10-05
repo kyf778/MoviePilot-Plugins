@@ -17,6 +17,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 官方门禁脚本输出中文；Windows 控制台默认 GBK 会直接抛 UnicodeEncodeError。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_ID = "mylibrary"
 PLUGIN_DIR = ROOT / "plugins.v3" / PLUGIN_ID
@@ -35,68 +42,49 @@ def ok(msg: str) -> None:
     print("  [OK]   %s" % msg)
 
 
-def check_versions() -> None:
-    """plugin_version、索引 version、最新 history 三者必须一致（官方硬性规则）。"""
-    print("\n=== 版本一致性 ===")
-    src = INIT.read_text(encoding="utf-8")
-    plugin_version = re.search(r'plugin_version\s*=\s*"([^"]+)"', src).group(1)
-    index = json.loads(INDEX.read_text(encoding="utf-8"))["MyLibrary"]
-    index_version = index["version"]
-    history = list(index["history"].keys())
-    latest = history[0]
-    if plugin_version == index_version == latest.lstrip("v"):
-        ok("plugin_version / index / history 一致：%s" % plugin_version)
-    else:
-        fail(
-            "版本不一致：plugin_version=%s, index=%s, history=%s"
-            % (plugin_version, index_version, latest)
-        )
+def run_official_gate(script: str, *args: str) -> None:
+    """调用从官方仓库原样 vendor 的门禁脚本。
 
-    keys = list(index["history"].keys())
-    ordered = sorted(
-        keys, key=lambda s: [int(x) for x in s.lstrip("v").split(".")], reverse=True
+    这些脚本直接取自 jxxghp/MoviePilot-Plugins，判定逻辑与官方 CI 一致。
+    本仓库不重写规则，避免两边漂移——自己写的近似实现曾经漏判过
+    「package.json 版本跃迁」这类官方才有的约束。
+    """
+    path = ROOT / ".github" / "scripts" / script
+    if not path.is_file():
+        fail("缺少官方门禁脚本 %s" % script)
+        return
+    r = subprocess.run(
+        [sys.executable, str(path), *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
-    if keys == ordered:
-        ok("history 按语义版本降序")
+    detail = (r.stdout or r.stderr or "").strip().splitlines()
+    if r.returncode == 0:
+        ok("%s -> %s" % (script, detail[-1] if detail else "通过"))
     else:
-        fail("history 未降序：%s" % keys)
+        fail("%s 失败：\n%s" % (script, "\n".join(detail[-12:])))
 
-    if not index.get("system_version", "").startswith(">="):
-        fail(
-            "system_version 应为 PEP440（如 >=3.0.0），当前 %r"
-            % index.get("system_version")
-        )
-    else:
-        ok("system_version = %s" % index["system_version"])
 
+def check_versions() -> None:
+    """版本一致性直接交给官方 check_plugin_versions.py 判定。"""
+    print("\n=== 版本一致性（官方门禁）===")
+    run_official_gate("check_plugin_versions.py", "package.v3.json")
+
+    # 官方脚本不检查这两项，本仓库额外自查。
+    index = json.loads(INDEX.read_text(encoding="utf-8"))["MyLibrary"]
     if index.get("release") is not True:
         fail("联邦插件必须在索引中设置 release: true")
     else:
         ok("release = true")
+    if not str(index.get("system_version", "")).startswith(">="):
+        fail("system_version 应为 PEP440（如 >=3.0.0）")
+    else:
+        ok("system_version = %s" % index["system_version"])
 
 
 def check_federation_css() -> None:
-    """不得发布 Vuetify/MDI 全局基础样式（官方 8.3 强制要求）。"""
+    """联邦 CSS 隔离直接交给官方 check_federation_css.py 判定。"""
     print("\n=== 联邦 CSS 隔离（官方门禁）===")
-    shared = sorted(PLUGIN_DIR.glob("**/__federation_shared_vuetify/styles-*.css"))
-    for css in shared:
-        fail("%s: 不得发布 Vuetify 共享基础样式" % css.relative_to(ROOT))
-
-    remote_entries = sorted(PLUGIN_DIR.glob("**/remoteEntry.js"))
-    if not remote_entries:
-        fail("缺少 remoteEntry.js，前端可能未构建")
-        return
-    for entry in remote_entries:
-        text = entry.read_text(encoding="utf-8")
-        for array_source in re.findall(
-            r"dynamicLoadingCss\s*\(\s*\[([^]]*)]", text, re.DOTALL
-        ):
-            for css_path in re.findall(r"['\"]([^'\"]+\.css)['\"]", array_source):
-                target = (entry.parent / css_path).resolve()
-                if not target.is_file():
-                    fail("remoteEntry 引用的 CSS 不存在：%s" % css_path)
-    if not errors:
-        ok("remoteEntry 引用的 CSS 均存在，且无 Vuetify 共享样式")
+    run_official_gate("check_federation_css.py", "--root", str(ROOT))
 
 
 def check_no_leaks() -> None:
