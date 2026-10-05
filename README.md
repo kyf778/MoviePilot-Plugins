@@ -78,12 +78,28 @@ MoviePilot-Plugins/
 ├── plugins.v3/              # V3 插件（目录名须为插件主类名的小写形式）
 │   └── mylibrary/
 │       ├── __init__.py      # 插件后端
+│       ├── vite.config.js   # 联邦构建配置（官方 CSS 门禁依赖它识别插件）
 │       └── dist/            # Vue 联邦构建产物
 ├── icons/                   # 插件图标
 ├── tools/                   # 辅助脚本
-├── tests/v3/                # V3 插件测试
-└── package.v3.json          # 插件市场索引
+├── tests/v3/mylibrary/      # V3 插件测试
+├── .github/scripts/         # 发布前检查脚本
+├── package.v3.json          # V3 插件市场索引（本插件实际生效的索引）
+└── package.json             # 旧代索引占位，见下方说明
 ```
+
+### 关于两个索引文件的版本号
+
+官方版本门禁要求 **V3 版本 = 旧代版本主号 + 1**（大版本跃迁）。本插件是 V3 专用实现，
+因此：
+
+| 文件 | 版本 | 作用 |
+|---|---|---|
+| `package.v3.json` | `3.3.0` | V3 宿主实际读取的索引 |
+| `package.json` | `2.0.0` + `"v3": false` | 旧代占位，让旧代宿主识别后跳过 |
+
+⚠️ **不要把 `package.json` 的版本改成 `3.3.0`**，那会触发官方门禁失败
+（V3 版本必须比旧代大一号）。改动版本时两个文件要一起考虑。
 
 ## 开发
 
@@ -93,11 +109,24 @@ pnpm install
 pnpm build          # 产物输出到 dist/assets
 ```
 
+提交前跑一次统一检查（版本一致性 + 联邦 CSS 隔离 + 隐私扫描 + 单元测试）：
+
+```bash
+python .github/scripts/preflight.py
+```
+
+> 该脚本等价于官方门禁的本地版本。官方 CI 还会额外运行
+> `check_federation_css.py` 与 `check_plugin_versions.py` 两个脚本，
+> 判定逻辑以官方为准。
+
 提交前请确保：
 
 - `plugin_version`、`package.v3.json` 中的 `version` 与最新 `history` 三者一致
 - 当前版本历史置顶，其余按语义版本降序
 - 插件目录名为插件主类名的小写形式（`MyLibrary` → `mylibrary`）
+- **不得发布 `__federation_shared_vuetify/styles-*.css`**——联邦组件与主程序共用
+  同一个 `document`，Vuetify 全局样式会污染宿主界面。`vite.config.js` 里的
+  postcss 过滤器负责丢弃来自 `node_modules/vuetify` 的样式，改构建配置时不要删掉它
 
 ## 免责声明
 
