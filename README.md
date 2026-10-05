@@ -109,7 +109,7 @@ pnpm install
 pnpm build          # 产物输出到 dist/assets
 ```
 
-提交前跑一次统一检查（版本一致性 + 联邦 CSS 隔离 + 隐私扫描 + 单元测试）：
+提交前跑一次统一检查（Python 编译 + 版本一致性 + 联邦 CSS 隔离 + 隐私扫描 + 单元测试）：
 
 ```bash
 python .github/scripts/preflight.py
@@ -118,6 +118,9 @@ python .github/scripts/preflight.py
 > 该脚本等价于官方门禁的本地版本。官方 CI 还会额外运行
 > `check_federation_css.py` 与 `check_plugin_versions.py` 两个脚本，
 > 判定逻辑以官方为准。
+
+本仓库自己的 CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上运行
+preflight 与联邦产物检查，测试全用本地临时目录，不访问公网。
 
 提交前请确保：
 
