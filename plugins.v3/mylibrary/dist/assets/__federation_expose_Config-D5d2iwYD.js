@@ -31,6 +31,7 @@ const form = reactive({
   enabled: Boolean(props.initialConfig?.enabled),
   library_path: props.initialConfig?.library_path || '',
   poster_size: props.initialConfig?.poster_size || 'medium',
+  douban_auto: props.initialConfig?.douban_auto !== false,
 });
 
 async function onSave() {
@@ -40,6 +41,7 @@ async function onSave() {
       enabled: form.enabled,
       library_path: form.library_path,
       poster_size: form.poster_size,
+      douban_auto: form.douban_auto,
     };
     await props.api.put(`plugin/${props.pluginId}`, cfg);
     emit('save', cfg);
@@ -102,6 +104,19 @@ return (_ctx, _cache) => {
           ]),
           _: 1
         }),
+        _createVNode(_component_VCol, { cols: "12" }, {
+          default: _withCtx(() => [
+            _createVNode(_component_VSwitch, {
+              modelValue: form.douban_auto,
+              "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.douban_auto) = $event)),
+              label: "自动补齐豆瓣 ID",
+              color: "primary",
+              "hide-details": "",
+              messages: "发现新片入库但没有豆瓣 ID 时，后台自动查询补上（每部间隔 1.2 秒，触发豆瓣限流会自动暂停）。关闭后只能手动跑 tools/fetch_douban_ids.py。"
+            }, null, 8, ["modelValue"])
+          ]),
+          _: 1
+        }),
         _createVNode(_component_VCol, {
           cols: "12",
           class: "d-flex justify-end"
@@ -112,7 +127,7 @@ return (_ctx, _cache) => {
               loading: saving.value,
               onClick: onSave
             }, {
-              default: _withCtx(() => [...(_cache[3] || (_cache[3] = [
+              default: _withCtx(() => [...(_cache[4] || (_cache[4] = [
                 _createTextVNode("保存", -1)
               ]))]),
               _: 1

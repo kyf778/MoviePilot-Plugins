@@ -8,10 +8,13 @@
 """
 
 import importlib
+import json
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_DIR = REPO_ROOT / "plugins.v3" / "mylibrary"
@@ -227,6 +230,211 @@ class TestHumanSize(unittest.TestCase):
         self.assertIn("KB", f(1024))
         self.assertIn("MB", f(1024 * 1024))
         self.assertIn("GB", f(3 * 1024 ** 3))
+
+
+class TestDoubanAutoFetch(unittest.TestCase):
+    """豆瓣 ID 自动补齐：解析、挑选、缺漏检测与线程生命周期。
+
+    这些测试不联网——网络入口 _douban_http_get 在需要时被替换。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _plugin(self) -> "MyLibrary":
+        plugin = MyLibrary()
+        plugin._library_path = str(self.root)
+        return plugin
+
+    # ---- 目录名解析 ----
+    def test_parse_dirname_with_year(self):
+        self.assertEqual(
+            MyLibrary._douban_parse_dirname("碟中谍 (1996)"), ("碟中谍", "1996")
+        )
+
+    def test_parse_dirname_keeps_inner_spaces(self):
+        self.assertEqual(
+            MyLibrary._douban_parse_dirname("复仇者联盟 4 (2019)"),
+            ("复仇者联盟 4", "2019"),
+        )
+
+    def test_parse_dirname_without_year(self):
+        self.assertEqual(MyLibrary._douban_parse_dirname("国配经典"), ("国配经典", ""))
+
+    # ---- 标题归一化 ----
+    def test_normalize_ignores_punctuation_and_case(self):
+        n = MyLibrary._douban_normalize
+        self.assertEqual(n("Spider-Man: Homecoming"), n("spiderman homecoming"))
+        self.assertEqual(n("无间道Ⅲ"), n("无间道Ⅲ"))
+
+    # ---- 搜索结果解析 ----
+    def test_parse_search_extracts_subject(self):
+        html = (
+            '<ul>'
+            '<li><a href="/movie/subject/1292484/"><img src="a.jpg"/>'
+            '<div class="subject-info"><span class="subject-title">碟中谍</span>'
+            '<p class="subject-abstract">汤姆·克鲁斯 / 1996 / 动作</p></div></a></li>'
+            '<li><a href="/movie/subject/1292484/">重复项</a></li>'
+            '<li><a href="/movie/subject/1295644/"><div class="subject-info">'
+            '<span class="subject-title">碟中谍2</span>'
+            '<p class="subject-abstract">2000 / 动作</p></div></a></li>'
+            '</ul>'
+        )
+        got = MyLibrary._douban_parse_search(html)
+        self.assertEqual(got, [("1292484", "碟中谍", "1996"), ("1295644", "碟中谍2", "2000")])
+
+    def test_parse_search_ignores_non_movie_links(self):
+        html = '<li><a href="/book/subject/123/"><span class="subject-title">书</span></a></li>'
+        self.assertEqual(MyLibrary._douban_parse_search(html), [])
+
+    # ---- 反爬识别 ----
+    def test_rate_limit_page_detected(self):
+        page = '{"error_info": "搜索访问太频繁，请稍后再试"}'
+        self.assertTrue(MyLibrary._douban_is_rate_limited(page))
+
+    def test_normal_page_is_not_rate_limited(self):
+        self.assertFalse(MyLibrary._douban_is_rate_limited("<li>正常结果</li>"))
+        self.assertFalse(MyLibrary._douban_is_rate_limited(""))
+
+    # ---- 候选挑选 ----
+    def test_pick_prefers_matching_year(self):
+        cands = [("111", "碟中谍", "2000"), ("222", "碟中谍", "1996")]
+        sid, year = MyLibrary._douban_pick(cands, "碟中谍", "1996")
+        self.assertEqual((sid, year), ("222", "1996"))
+
+    def test_pick_rejects_unrelated_candidate(self):
+        """宁可不给 id（前端回退搜索页），也不能挂错豆瓣链接。"""
+        cands = [("999", "完全无关的电影", "2011")]
+        self.assertEqual(MyLibrary._douban_pick(cands, "碟中谍", "1996"), (None, ""))
+
+    def test_pick_handles_empty_candidates(self):
+        self.assertEqual(MyLibrary._douban_pick([], "任意", "2000"), (None, ""))
+
+    # ---- 缺漏检测 ----
+    def test_todo_only_lists_dirs_with_nfo_and_no_id(self):
+        (self.root / "缺失 (2020)").mkdir()
+        (self.root / "缺失 (2020)" / "movie.nfo").write_text("<movie/>", encoding="utf-8")
+        (self.root / "已缓存 (2019)").mkdir()
+        (self.root / "已缓存 (2019)" / "movie.nfo").write_text("<movie/>", encoding="utf-8")
+        (self.root / "没nfo (2018)").mkdir()
+        (self.root / "没nfo (2018)" / "movie.mkv").write_bytes(b"x")
+        (self.root / ".隐藏").mkdir()
+        (self.root / ".douban_ids.json").write_text(
+            '{"已缓存 (2019)": {"douban_id": "123"}}', encoding="utf-8"
+        )
+        todo = self._plugin()._douban_todo()
+        self.assertEqual(todo, [("缺失 (2020)", "缺失", "2020")])
+
+    def test_todo_skips_failed_in_this_session(self):
+        (self.root / "查不到 (2020)").mkdir()
+        (self.root / "查不到 (2020)" / "movie.nfo").write_text("<movie/>", encoding="utf-8")
+        self.assertEqual(self._plugin()._douban_todo({"查不到 (2020)"}), [])
+
+    def test_todo_empty_cache_returns_all_missing(self):
+        for name in ("甲 (2001)", "乙 (2002)"):
+            (self.root / name).mkdir()
+            (self.root / name / "movie.nfo").write_text("<movie/>", encoding="utf-8")
+        self.assertEqual(
+            [t[0] for t in self._plugin()._douban_todo()], ["乙 (2002)", "甲 (2001)"]  # sorted 按目录名
+        )
+
+    def test_todo_without_library_path_is_empty(self):
+        plugin = MyLibrary()
+        self.assertEqual(plugin._douban_todo(), [])
+
+    # ---- 落盘 ----
+    def test_save_merges_and_keeps_existing_entries(self):
+        cache = self.root / ".douban_ids.json"
+        cache.write_text('{"旧片 (1990)": {"douban_id": "1"}}', encoding="utf-8")
+        plugin = self._plugin()
+        plugin._douban_save("新片 (2020)", "888", "新片", "2020", "2020")
+        raw = json.loads(cache.read_text(encoding="utf-8"))
+        self.assertEqual(raw["旧片 (1990)"]["douban_id"], "1")
+        self.assertEqual(raw["新片 (2020)"]["douban_id"], "888")
+        self.assertEqual(raw["新片 (2020)"]["match_year"], "2020")
+        self.assertFalse((self.root / ".douban_ids.json.tmp").exists())
+
+    def test_save_recovers_from_corrupt_cache(self):
+        cache = self.root / ".douban_ids.json"
+        cache.write_text("{ 坏文件", encoding="utf-8")
+        self._plugin()._douban_save("新片 (2020)", "888", "新片", "2020")
+        raw = json.loads(cache.read_text(encoding="utf-8"))
+        self.assertEqual(raw["新片 (2020)"]["douban_id"], "888")
+
+    def test_cache_written_by_plugin_is_readable(self):
+        """自动补齐写出的格式必须与只读解析、与手动脚本保持一致。"""
+        plugin = self._plugin()
+        plugin._douban_save("新片 (2020)", "888", "新片", "2020", "2020")
+        self.assertEqual(plugin._load_douban_ids(), {"新片 (2020)": "888"})
+
+    # ---- 限流不落盘 ----
+    def test_search_reports_rate_limit_without_candidates(self):
+        plugin = self._plugin()
+        with mock.patch.object(
+            MyLibrary, "_douban_http_get", return_value='{"error_info":"搜索访问太频繁"}'
+        ):
+            cands, limited = plugin._douban_search("碟中谍")
+        self.assertTrue(limited)
+        self.assertEqual(cands, [])
+
+    def test_search_parses_candidates_when_ok(self):
+        html = ('<li><a href="/movie/subject/1292484/">'
+                '<span class="subject-title">碟中谍</span><p>1996</p></a></li>')
+        with mock.patch.object(MyLibrary, "_douban_http_get", return_value=html):
+            cands, limited = MyLibrary._douban_search("碟中谍")
+        self.assertFalse(limited)
+        self.assertEqual(cands, [("1292484", "碟中谍", "1996")])
+
+    # ---- 线程生命周期 ----
+    def test_no_worker_when_plugin_disabled(self):
+        plugin = self._plugin()
+        plugin.init_plugin({"enabled": False, "library_path": str(self.root), "douban_auto": True})
+        self.assertIsNone(plugin._douban_thread)
+
+    def test_no_worker_when_auto_disabled(self):
+        plugin = self._plugin()
+        plugin.init_plugin({"enabled": True, "library_path": str(self.root), "douban_auto": False})
+        self.assertIsNone(plugin._douban_thread)
+
+    def test_worker_starts_and_stops_cleanly(self):
+        plugin = self._plugin()
+        plugin.init_plugin({"enabled": True, "library_path": str(self.root), "douban_auto": True})
+        thread = plugin._douban_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.is_alive())
+        plugin.stop_service()
+        self.assertFalse(thread.is_alive())
+
+    def test_reinit_does_not_stack_workers(self):
+        """配置反复保存时不能越堆越多线程。"""
+        plugin = self._plugin()
+        cfg = {"enabled": True, "library_path": str(self.root), "douban_auto": True}
+        plugin.init_plugin(cfg)
+        first = plugin._douban_thread
+        plugin.init_plugin(cfg)
+        self.assertIsNot(first, plugin._douban_thread)
+        self.assertFalse(first.is_alive())
+        plugin.stop_service()
+
+    def test_worker_with_nothing_missing_stays_idle(self):
+        """没有待补条目时不得发起任何请求（豆瓣反爬经不起空转）。"""
+        plugin = self._plugin()
+        calls = []
+        with mock.patch.object(
+            MyLibrary, "_douban_http_get", side_effect=lambda *a, **k: calls.append(a) or ""
+        ):
+            plugin.init_plugin({"enabled": True, "library_path": str(self.root), "douban_auto": True})
+            time.sleep(0.3)
+            plugin.stop_service()
+        self.assertEqual(calls, [])
+
+    def test_get_form_defaults_auto_on(self):
+        _, default = MyLibrary().get_form()
+        self.assertTrue(default.get("douban_auto"))
 
 
 class TestDoubanCache(unittest.TestCase):
