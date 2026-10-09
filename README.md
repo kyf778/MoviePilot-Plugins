@@ -1,5 +1,7 @@
 # MoviePilot-Plugins
 
+[English](./README.en.md) | **简体中文**
+
 个人 MoviePilot V3 插件市场仓库。
 
 MoviePilot 通过 `PLUGIN_MARKET` 配置读取 GitHub 仓库的 `main` 分支索引，多个地址用逗号分隔。
